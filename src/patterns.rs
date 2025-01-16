@@ -1,31 +1,38 @@
-pub fn is_empty(pattern: &str) -> bool {
-    pattern.len() == 0
+#[derive(Clone)]
+pub enum Pattern {
+    SingleCharacter(char),
+    Digit,
+    WordLike,
+    Group(Vec<Pattern>, bool),
 }
 
-pub fn is_single_char(pattern: &str) -> bool {
-    pattern.len() == 1
-}
+impl Pattern {
+    pub fn single_character(c: char) -> Self {
+        Pattern::SingleCharacter(c)
+    }
 
-pub fn is_digit(pattern: &str) -> bool {
-    pattern == "\\d"
-}
+    pub fn digit() -> Self {
+        Pattern::Digit
+    }
 
-pub fn is_wordlike(pattern: &str) -> bool {
-    pattern == "\\w"
-}
+    pub fn word_like() -> Self {
+        Pattern::WordLike
+    }
 
-pub fn is_positive_group(pattern: &str) -> bool {
-    let mut chars_iter = pattern.chars().into_iter();
-    let first = chars_iter.next().unwrap();
-    let second = chars_iter.next().unwrap();
-    let last = chars_iter.last().unwrap();
-    first == '[' && last == ']' && second != '^'
-}
+    pub fn group(chars: Vec<Pattern>, is_negative: bool) -> Self {
+        Pattern::Group(chars, is_negative)
+    }
 
-pub fn is_negative_group(pattern: &str) -> bool {
-    let mut chars_iter = pattern.chars().into_iter();
-    let first = chars_iter.next().unwrap();
-    let second = chars_iter.next().unwrap();
-    let last = chars_iter.last().unwrap();
-    first == '[' && last == ']' && second == '^'
+    pub fn first_match(&self, haystack: &str) -> Option<usize> {
+        match self {
+            Pattern::SingleCharacter(c) => haystack.find(*c),
+            Pattern::Digit => haystack.chars().position(|c| c.is_digit(10)),
+            Pattern::WordLike => haystack
+                .chars()
+                .position(|c| c.is_digit(10) || c.is_alphabetic() || c == '_'),
+            Pattern::Group(patterns, is_negative) => patterns.iter().position(|p| {
+                p.first_match(haystack).is_none() == *is_negative
+            }),
+        }
+    }
 }
