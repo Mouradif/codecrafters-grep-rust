@@ -4,7 +4,9 @@ use std::process;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
     if pattern.chars().count() == 1 {
-        return input_line.contains(pattern);
+        input_line.contains(pattern)
+    } else if pattern == "\\d" {
+        input_line.chars().any(|c| c.is_digit(10))
     } else {
         panic!("Unhandled pattern: {}", pattern)
     }
