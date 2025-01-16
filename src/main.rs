@@ -1,16 +1,17 @@
 use std::env;
 use std::io;
 use std::process;
+use codecrafters_grep::matchers::*;
+use codecrafters_grep::patterns::*;
 
 fn match_pattern(input_line: &str, pattern: &str) -> bool {
-    if pattern.chars().count() == 1 {
-        input_line.contains(pattern)
-    } else if pattern == "\\d" {
-        input_line.chars().any(|c| c.is_digit(10))
-    } else if pattern == "\\w" {
-        input_line.chars().any(|c| c.is_digit(10) || c.is_alphabetic() || c == '_')
-    } else {
-        panic!("Unhandled pattern: {}", pattern)
+    match pattern {
+        _ if is_empty(pattern) => false,
+        _ if is_single_char(pattern) => match_char(input_line, pattern),
+        _ if is_digit(pattern) => match_digit(input_line),
+        _ if is_wordlike(pattern) => match_wordlike(input_line),
+        _ if is_positive_group(pattern) => match_positive_group(input_line, &pattern[1..pattern.len() - 1]),
+        _ => panic!("Unhandled pattern: {}", pattern),
     }
 }
 
