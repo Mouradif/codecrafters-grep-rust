@@ -18,3 +18,12 @@ pub fn match_positive_group(input_line: &str, chars: &str) -> bool {
     }
     false
 }
+
+pub fn match_negative_group(input_line: &str, chars: &str) -> bool {
+    for char in chars.chars() {
+        if !input_line.contains(char) {
+            return true;
+        }
+    }
+    false
+}

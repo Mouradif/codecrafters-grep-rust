@@ -11,6 +11,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         _ if is_digit(pattern) => match_digit(input_line),
         _ if is_wordlike(pattern) => match_wordlike(input_line),
         _ if is_positive_group(pattern) => match_positive_group(input_line, &pattern[1..pattern.len() - 1]),
+        _ if is_negative_group(pattern) => match_negative_group(input_line, &pattern[2..pattern.len() - 1]),
         _ => panic!("Unhandled pattern: {}", pattern),
     }
 }

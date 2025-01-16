@@ -17,6 +17,15 @@ pub fn is_wordlike(pattern: &str) -> bool {
 pub fn is_positive_group(pattern: &str) -> bool {
     let mut chars_iter = pattern.chars().into_iter();
     let first = chars_iter.next().unwrap();
+    let second = chars_iter.next().unwrap();
     let last = chars_iter.last().unwrap();
-    first == '[' && last == ']'
+    first == '[' && last == ']' && second != '^'
+}
+
+pub fn is_negative_group(pattern: &str) -> bool {
+    let mut chars_iter = pattern.chars().into_iter();
+    let first = chars_iter.next().unwrap();
+    let second = chars_iter.next().unwrap();
+    let last = chars_iter.last().unwrap();
+    first == '[' && last == ']' && second == '^'
 }
