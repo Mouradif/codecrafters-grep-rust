@@ -7,7 +7,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let mut patterns: Vec<Pattern> = vec![];
     let mut current_group: Option<Pattern> = None;
     let mut is_escaping = false;
-    let mut match_start = false;
+    let mut max_distance_from_start = input_line.len();
     let mut match_end = false;
     let mut last_pattern: Option<Pattern> = None;
 
@@ -77,7 +77,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
             },
             '^' => {
                 if index == 0 {
-                    match_start = true;
+                    max_distance_from_start = 0;
                 } else if let Some(Pattern::Any(group_chars, is_negative)) = &mut current_group {
                     if group_chars.is_empty() && !*is_negative {
                         *is_negative = true;
@@ -125,20 +125,32 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
             '?' => {
                 if let Some(Pattern::Any(group_chars, _)) = &mut current_group {
                     group_chars.push(Pattern::single_character(char));
+                } else if let Some(Pattern::Optional(_)) = last_pattern {
+                    let p = Pattern::single_character(char);
+                    patterns.push(p.clone());
+                    last_pattern = Some(p.clone());
+                } else if last_pattern.is_none() || is_escaping {
+                    let p = Pattern::single_character(char);
+                    patterns.push(p.clone());
+                    last_pattern = Some(p.clone());
                 } else {
-                    if let Some(Pattern::Optional(_)) = last_pattern {
-                        let p = Pattern::single_character(char);
-                        patterns.push(p.clone());
-                        last_pattern = Some(p.clone());
-                    } else if last_pattern.is_none() || is_escaping {
-                        let p = Pattern::single_character(char);
-                        patterns.push(p.clone());
-                        last_pattern = Some(p.clone());
-                    } else {
-                        let last = patterns.pop().unwrap();
-                        patterns.push(Pattern::optional(last));
-                        last_pattern = None;
-                    }
+                    let last = patterns.pop().unwrap();
+                    patterns.push(Pattern::optional(last));
+                    last_pattern = None;
+                }
+
+            },
+            '.' => {
+                if let Some(Pattern::Any(group_chars, _)) = &mut current_group {
+                    group_chars.push(Pattern::single_character(char));
+                } else if is_escaping {
+                    let p = Pattern::single_character(char);
+                    patterns.push(p.clone());
+                    last_pattern = Some(p.clone());
+                } else {
+                    let p = Pattern::wildcard();
+                    patterns.push(p.clone());
+                    last_pattern = Some(p.clone());
                 }
             },
             _ => {
@@ -158,18 +170,31 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let mut position = 0;
     for (index, p) in patterns.iter().enumerate() {
         if let Pattern::Optional(pat) = p {
-            if let Some(found_at) = pat.matches(
+            if let (Some(found_at), _) = pat.matches(
                 &input_line[position..],
-                match_start,
+                max_distance_from_start,
                 match_end
             ) {
                 position += found_at + 1;
+                max_distance_from_start = 0;
             }
-        } else if let Some(found_at) = p.matches(
+        } else if let Pattern::Repeating(_) = p {
+            let (maybe_found, len) = p.matches(
+                &input_line[position..],
+                max_distance_from_start,
+                index == patterns.len() - 1 && match_end
+            );
+            if maybe_found.is_none() {
+                return false;
+            }
+            max_distance_from_start = len;
+            position += 1;
+        } else if let (Some(found_at), _) = p.matches(
             &input_line[position..],
-            index == 0 && match_start,
+            max_distance_from_start,
             index == patterns.len() - 1 && match_end
         ) {
+            max_distance_from_start = 0;
             position += found_at + 1;
         } else {
             return false;
