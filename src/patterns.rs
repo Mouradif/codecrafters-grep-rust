@@ -1,6 +1,7 @@
 #[derive(Clone, Debug)]
 pub enum Pattern {
     SingleCharacter(char),
+    RepeatingLast,
     Digit,
     WordLike,
     Any(Vec<Pattern>, bool),
@@ -9,6 +10,10 @@ pub enum Pattern {
 impl Pattern {
     pub fn single_character(c: char) -> Self {
         Pattern::SingleCharacter(c)
+    }
+
+    pub fn repeating_character() -> Self {
+        Pattern::RepeatingLast
     }
 
     pub fn digit() -> Self {
@@ -23,32 +28,52 @@ impl Pattern {
         Pattern::Any(vec![], false)
     }
 
-    pub fn first_match(&self, haystack: &str) -> Option<usize> {
-        match self {
+    pub fn matches(&self, previous: Option<Pattern>, haystack: &str, match_start: bool, match_end: bool) -> Option<usize> {
+        eprintln!("Trying to match {} with {:?}", haystack, self);
+        if let Some(index) = match self {
             Pattern::SingleCharacter(c) => haystack.find(*c),
+            Pattern::RepeatingLast => {
+                if previous.is_none() {
+                    panic!("Repeating pattern found but no previous pattern was provided.")
+                }
+                let p = previous.unwrap();
+                let mut found = false;
+                for i in 0..haystack.chars().count() {
+                    if !found && !p.matches(None, &haystack[i..], true, false).is_none() {
+                        found = true;
+                    }
+                    if found && p.matches(None, &haystack[i..], true, false).is_none() {
+                        return Some(i - 1)
+                    }
+                }
+                return None;
+            },
             Pattern::Digit => haystack.chars().position(|c| c.is_digit(10)),
             Pattern::WordLike => haystack
                 .chars()
                 .position(|c| c.is_digit(10) || c.is_alphabetic() || c == '_'),
-            Pattern::Any(patterns, is_negative) => patterns.iter().position(|p| {
-                p.first_match(haystack).is_none() == *is_negative
-            }),
+            Pattern::Any(patterns, is_negative) => {
+                for p in patterns {
+                    let matches = p.matches(None, haystack, match_start, match_end);
+                    if *is_negative && !matches.is_none() {
+                        return None;
+                    }
+                    if !*is_negative && !matches.is_none() {
+                        return matches;
+                    }
+                }
+                if *is_negative {
+                    return Some(0);
+                }
+                return None
+            },
+        } {
+            return if (match_start && index > 0) || (match_end && index != haystack.len() - 1) {
+                None
+            } else {
+                Some(index)
+            }
         }
-    }
-
-    pub fn matches(&self, haystack: &str) -> bool {
-        let first_char = haystack.chars().next();
-        if first_char.is_none() {
-            return false;
-        }
-        let f = first_char.unwrap();
-        match self {
-            Pattern::SingleCharacter(c) => f == *c,
-            Pattern::Digit => f.is_digit(10),
-            Pattern::WordLike => f.is_digit(10) || f.is_alphabetic() || f == '_',
-            Pattern::Any(patterns, is_negative) => patterns.iter().any(|p| {
-                p.matches(haystack) == !*is_negative
-            })
-        }
+        None
     }
 }

@@ -53,7 +53,6 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     current_group = Some(Pattern::any());
                 }
-                is_escaping = false;
             },
             ']' => {
                 if let Some(Pattern::Any(group_chars, is_negative)) = &mut current_group {
@@ -66,7 +65,6 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(Pattern::single_character(char));
                 }
-                is_escaping = false;
             },
             '^' => {
                 if index == 0 {
@@ -80,7 +78,6 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(Pattern::single_character(char));
                 }
-                is_escaping = false;
             },
             '$' => {
                 if index == count - 1 && !is_escaping {
@@ -92,7 +89,18 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                     } else {
                         patterns.push(p);
                     }
-                    is_escaping = false;
+                }
+            },
+            '+' => {
+                if patterns.len() == 0 || is_escaping {
+                    let p = Pattern::single_character(char);
+                    if let Some(Pattern::Any(group_chars, _)) = &mut current_group {
+                        group_chars.push(p);
+                    } else {
+                        patterns.push(p);
+                    }
+                } else {
+                    patterns.push(Pattern::repeating_character());
                 }
             },
             _ => {
@@ -102,24 +110,28 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(p);
                 }
-                is_escaping = false;
             }
+        }
+        if is_escaping && char != '\\' {
+            is_escaping = false;
         }
     }
     let mut position = 0;
     for (index, p) in patterns.iter().enumerate() {
-        if index == 0 && !match_start {
-            if let Some(found_at) = p.first_match(&input_line) {
-                position += found_at;
-            } else {
-                return false;
-            }
-        } else if !p.matches(&input_line[position..]) || (
-            match_end && index == patterns.len() - 1 && input_line.len() > position + 1
+        let previous = if index == 0 { None } else { Some(patterns[index - 1].clone()) };
+        if let Some(found_at) = p.matches(
+            previous,
+            &input_line[position..],
+            index == 0 && match_start,
+            index == patterns.len() - 1 && match_end
         ) {
-            return false;
+            position += found_at + 1;
+        } else {
+            match p {
+                Pattern::RepeatingLast => continue,
+                _ => return false,
+            }
         }
-        position += 1;
     }
     return true;
 }
