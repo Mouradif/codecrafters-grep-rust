@@ -7,10 +7,13 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     let mut patterns: Vec<Pattern> = vec![];
     let mut current_group: Option<Pattern> = None;
     let mut is_escaping = false;
-    let mut is_first = true;
     let mut match_start = false;
+    let mut match_end = false;
 
-    for char in pattern.chars() {
+    let chars = pattern.chars();
+    let count = chars.clone().count();
+
+    for (index, char) in chars.enumerate() {
         match char {
             '\\' => {
                 if is_escaping {
@@ -50,6 +53,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     current_group = Some(Pattern::any());
                 }
+                is_escaping = false;
             },
             ']' => {
                 if let Some(Pattern::Any(group_chars, is_negative)) = &mut current_group {
@@ -62,9 +66,10 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(Pattern::single_character(char));
                 }
+                is_escaping = false;
             },
             '^' => {
-                if is_first {
+                if index == 0 {
                     match_start = true;
                 } else if let Some(Pattern::Any(group_chars, is_negative)) = &mut current_group {
                     if group_chars.is_empty() && !*is_negative {
@@ -75,6 +80,20 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(Pattern::single_character(char));
                 }
+                is_escaping = false;
+            },
+            '$' => {
+                if index == count - 1 && !is_escaping {
+                    match_end = true;
+                } else {
+                    let p = Pattern::single_character(char);
+                    if let Some(Pattern::Any(group_chars, _)) = &mut current_group {
+                        group_chars.push(p);
+                    } else {
+                        patterns.push(p);
+                    }
+                    is_escaping = false;
+                }
             },
             _ => {
                 let p = Pattern::single_character(char);
@@ -83,21 +102,21 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
                 } else {
                     patterns.push(p);
                 }
+                is_escaping = false;
             }
-        }
-        if is_first && !is_escaping {
-            is_first = false;
         }
     }
     let mut position = 0;
-    for p in patterns {
-        if position == 0 && !match_start {
+    for (index, p) in patterns.iter().enumerate() {
+        if index == 0 && !match_start {
             if let Some(found_at) = p.first_match(&input_line) {
                 position += found_at;
             } else {
                 return false;
             }
-        } else if !p.matches(&input_line[position..]) {
+        } else if !p.matches(&input_line[position..]) || (
+            match_end && index == patterns.len() - 1 && input_line.len() > position + 1
+        ) {
             return false;
         }
         position += 1;
