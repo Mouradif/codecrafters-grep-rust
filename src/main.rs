@@ -137,4 +137,24 @@ mod tests {
         assert!(match_pattern("bugs here and bugs there", "(b..s|c..e) here and \\1 there"));
         assert!(!match_pattern("bugz here and bugs there", "(b..s|c..e) here and \\1 there"));
     }
+
+    #[test]
+    fn test_multi_captures() {
+        assert!(match_pattern("3 red squares and 3 red circles", "(\\d+) (\\w+) squares and \\1 \\2 circles"));
+        assert!(!match_pattern("3 red squares and 4 red circles", "(\\d+) (\\w+) squares and \\1 \\2 circles"));
+        assert!(match_pattern("grep 101 is doing grep 101 times", "(\\w\\w\\w\\w) (\\d\\d\\d) is doing \\1 \\2 times"));
+        assert!(!match_pattern("$?! 101 is doing $?! 101 times", "(\\w\\w\\w) (\\d\\d\\d) is doing \\1 \\2 times"));
+        assert!(!match_pattern("grep yes is doing grep yes times", "(\\w\\w\\w\\w) (\\d\\d\\d) is doing \\1 \\2 times"));
+        assert!(match_pattern("abc-def is abc-def, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
+        assert!(!match_pattern("efg-hij is efg-hij, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
+        assert!(!match_pattern("abc-def is abc-def, not xyz", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
+        assert!(match_pattern("apple pie, apple and pie", "^(\\w+) (\\w+), \\1 and \\2$"));
+        assert!(!match_pattern("pineapple pie, pineapple and pie", "^(apple) (\\w+), \\1 and \\2$"));
+        assert!(!match_pattern("apple pie, apple and pies", "^(\\w+) (pie), \\1 and \\2$"));
+        assert!(match_pattern("howwdy hey there, howwdy hey", "(how+dy) (he?y) there, \\1 \\2"));
+        assert!(!match_pattern("hody hey there, howwdy hey", "(how+dy) (he?y) there, \\1 \\2"));
+        assert!(!match_pattern("howwdy heeey there, howwdy heeey", "(how+dy) (he?y) there, \\1 \\2"));
+        assert!(match_pattern("cat and fish, cat with fish", "(c.t|d.g) and (f..h|b..d), \\1 with \\2"));
+        assert!(!match_pattern("bat and fish, cat with fish", "(c.t|d.g) and (f..h|b..d), \\1 with \\2"));
+    }
 }

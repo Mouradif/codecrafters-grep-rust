@@ -449,6 +449,9 @@ fn match_patterns(input_line: &str, patterns: Vec<Pattern>, mut max_distance_fro
     let mut captures: Vec<Vec<Pattern>> = vec![];
 
     for (index, p) in patterns.iter().enumerate() {
+        if position >= input_line.len() {
+            return None;
+        }
         if let (Some(found_at), len) = p.matches(
             &input_line[position..],
             &mut captures,
