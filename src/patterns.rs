@@ -1,7 +1,8 @@
 #[derive(Clone, Debug)]
 pub enum Pattern {
     SingleCharacter(char),
-    RepeatingLast,
+    Repeating(Box<Pattern>),
+    Optional(Box<Pattern>),
     Digit,
     WordLike,
     Any(Vec<Pattern>, bool),
@@ -12,8 +13,12 @@ impl Pattern {
         Pattern::SingleCharacter(c)
     }
 
-    pub fn repeating_character() -> Self {
-        Pattern::RepeatingLast
+    pub fn repeating(p: Pattern) -> Self {
+        Pattern::Repeating(Box::new(p))
+    }
+
+    pub fn optional(p: Pattern) -> Self {
+        Pattern::Optional(Box::new(p))
     }
 
     pub fn digit() -> Self {
@@ -28,21 +33,17 @@ impl Pattern {
         Pattern::Any(vec![], false)
     }
 
-    pub fn matches(&self, previous: Option<Pattern>, haystack: &str, match_start: bool, match_end: bool) -> Option<usize> {
+    pub fn matches(&self, haystack: &str, match_start: bool, match_end: bool) -> Option<usize> {
         eprintln!("Trying to match {} with {:?}", haystack, self);
         if let Some(index) = match self {
             Pattern::SingleCharacter(c) => haystack.find(*c),
-            Pattern::RepeatingLast => {
-                if previous.is_none() {
-                    panic!("Repeating pattern found but no previous pattern was provided.")
-                }
-                let p = previous.unwrap();
+            Pattern::Repeating(p) => {
                 let mut found = false;
                 for i in 0..haystack.chars().count() {
-                    if !found && !p.matches(None, &haystack[i..], true, false).is_none() {
+                    if !found && !p.matches(&haystack[i..], true, false).is_none() {
                         found = true;
                     }
-                    if found && p.matches(None, &haystack[i..], true, false).is_none() {
+                    if found && p.matches(&haystack[i..], true, false).is_none() {
                         return Some(i - 1)
                     }
                 }
@@ -54,7 +55,7 @@ impl Pattern {
                 .position(|c| c.is_digit(10) || c.is_alphabetic() || c == '_'),
             Pattern::Any(patterns, is_negative) => {
                 for p in patterns {
-                    let matches = p.matches(None, haystack, match_start, match_end);
+                    let matches = p.matches(haystack, match_start, match_end);
                     if *is_negative && !matches.is_none() {
                         return None;
                     }
@@ -67,6 +68,7 @@ impl Pattern {
                 }
                 return None
             },
+            _ => None
         } {
             return if (match_start && index > 0) || (match_end && index != haystack.len() - 1) {
                 None
