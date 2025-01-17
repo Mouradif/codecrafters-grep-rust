@@ -115,4 +115,26 @@ mod tests {
         assert!(match_pattern("a dog and cats", "a (cat|dog) and (cat|dog)s"));
         assert!(match_pattern("a cat and dogs", "a (cat|dog) and (cat|dog)s"));
     }
+
+    #[test]
+    fn test_capture() {
+        assert!(match_pattern("cat and cat", "(cat) and \\1"));
+        assert!(!match_pattern("cat and dog", "(cat) and \\1"));
+        assert!(match_pattern("grep 101 is doing grep 101 times", "(\\w\\w\\w\\w \\d\\d\\d) is doing \\1 times"));
+        assert!(!match_pattern("$?! 101 is doing $?! 101 times", "(\\w\\w\\w\\w \\d\\d\\d) is doing \\1 times"));
+        assert!(!match_pattern("grep yes is doing grep yes times", "(\\w\\w\\w\\w \\d\\d\\d) is doing \\1 times"));
+        assert!(match_pattern("abcd is abcd, not efg", "([abcd]+) is \\1, not [^xyz]+"));
+        assert!(!match_pattern("efgh is efgh, not efg", "([abcd]+) is \\1, not [^xyz]+"));
+        assert!(!match_pattern("abcd is abcd, not xyz", "([abcd]+) is \\1, not [^xyz]+"));
+        assert!(match_pattern("this starts and ends with this", "^(\\w+) starts and ends with \\1$"));
+        assert!(!match_pattern("that starts and ends with this", "^(\\w+) starts and ends with \\1$"));
+        assert!(!match_pattern("that starts and ends with this", "^(this) starts and ends with \\1$"));
+        assert!(!match_pattern("this starts and ends with this?", "^(this) starts and ends with \\1$"));
+        assert!(match_pattern("once a dreaaamer, always a dreaaamer", "once a (drea+mer), alwaysz? a \\1"));
+        assert!(!match_pattern("once a dreaamer, always a dreaaamer", "once a (drea+mer), alwaysz? a \\1"));
+        assert!(!match_pattern("once a dremer, always a dreaaamer", "once a (drea+mer), alwaysz? a \\1"));
+        assert!(!match_pattern("once a dreaaamer, alwayszzz a dreaaamer", "once a (drea+mer), alwaysz? a \\1"));
+        assert!(match_pattern("bugs here and bugs there", "(b..s|c..e) here and \\1 there"));
+        assert!(!match_pattern("bugz here and bugs there", "(b..s|c..e) here and \\1 there"));
+    }
 }

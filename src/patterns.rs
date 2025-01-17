@@ -8,6 +8,7 @@ enum Pattern {
     Any(Vec<Pattern>, bool),
     Wildcard,
     Choice(Vec<Vec<Pattern>>),
+    BackReference(usize),
 }
 
 impl Pattern {
@@ -43,9 +44,13 @@ impl Pattern {
         Pattern::Choice(choices)
     }
 
-    pub fn matches(&self, haystack: &str, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
-        if let (Some(index), len) = find_match(self, haystack, max_distance_from_start, match_end) {
-            return if (index > max_distance_from_start + 1) || (match_end && index != haystack.len()) {
+    pub fn backreference(n: usize) -> Self {
+        Pattern::BackReference(n)
+    }
+
+    pub fn matches(&self, haystack: &str, captures: &mut Vec<Vec<Pattern>>, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
+        if let (Some(index), len) = find_match(self, haystack, captures, max_distance_from_start, match_end) {
+            return if (index > max_distance_from_start + 1) || (match_end && index + len != haystack.len()) {
                 (None, 0)
             } else {
                 (Some(index), len)
@@ -55,74 +60,55 @@ impl Pattern {
     }
 }
 
-fn match_any(patterns: &Vec<Pattern>, haystack: &str, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
-    let mut max = 0;
+fn match_any(patterns: &Vec<Pattern>, haystack: &str, captures: &mut Vec<Vec<Pattern>>, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
     for pattern in patterns {
-        let (_, len) = pattern.matches(haystack, max_distance_from_start, match_end);
-        max = std::cmp::max(max, len);
+        if let (Some(index), _) = pattern.matches(haystack, captures, max_distance_from_start, match_end) {
+            return (Some(index), 0)
+        }
     }
-    if max == 0 {
-        (None, 0)
-    } else {
-        (Some(1), max)
-    }
+    (None, 0)
 }
 
-fn match_any_neg(patterns: &Vec<Pattern>, haystack: &str, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
-    let mut min = haystack.len();
+fn match_none(patterns: &Vec<Pattern>, haystack: &str, captures: &mut Vec<Vec<Pattern>>, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
     for pattern in patterns {
-        let (_, len) = pattern.matches(haystack, max_distance_from_start, match_end);
-        min = std::cmp::min(min, len);
+        if pattern.matches(haystack, captures, max_distance_from_start, match_end).0.is_some() {
+            return (None, 0)
+        }
     }
-    if min == 0 {
-        (Some(1), 1)
-    } else {
-        (None, 0)
-    }
+    (Some(1), 1)
 }
 
-fn match_all(patterns: &Vec<Pattern>, haystack: &str, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
-    let mut min = haystack.len();
-    for pattern in patterns {
-        let (_, len) = pattern.matches(haystack, max_distance_from_start, match_end);
-        min = std::cmp::min(min, len);
-    }
-    if min == 0 {
-        (None, 0)
-    } else {
-        (Some(1), min)
-    }
-}
-
-fn find_match(pattern: &Pattern, haystack: &str, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
+fn find_match(pattern: &Pattern, haystack: &str, captures: &mut Vec<Vec<Pattern>>, max_distance_from_start: usize, match_end: bool) -> (Option<usize>, usize) {
     match pattern {
         Pattern::SingleCharacter(c) => {
             if let Some(pos) = haystack.find(*c) {
-                (Some(pos + 1), 1)
+                (Some(pos + 1), 0)
             } else {
                 (None, 0)
             }
         },
         Pattern::Repeating(p) => {
             let mut found = false;
+            let mut index = 0;
             for (i, _) in haystack.char_indices() {
-                let (matches, _) = p.matches(&haystack[i..], 0, false);
+                let (matches, _) = p.matches(&haystack[i..], captures, 0, false);
                 if !found && !matches.is_none() {
                     found = true;
+                    index = i;
                 }
                 if found && matches.is_none() {
-                    return (Some(1), i)
+                    return (Some(index + 1), i - index)
                 }
             }
             if !found {
                 (None, 0)
             } else {
-                (Some(1), haystack.char_indices().count())
+                (Some(index + 1), haystack.char_indices().count() - index)
             }
         },
         Pattern::Digit => {
             if let Some(pos) = haystack.chars().position(|c| c.is_digit(10)) {
-                (Some(pos + 1), 1)
+                (Some(pos + 1), 0)
             } else {
                 (None, 0)
             }
@@ -131,34 +117,48 @@ fn find_match(pattern: &Pattern, haystack: &str, max_distance_from_start: usize,
             if let Some(pos) = haystack
                 .chars()
                 .position(|c| c.is_digit(10) || c.is_alphabetic() || c == '_') {
-                (Some(pos + 1), 1)
+                (Some(pos + 1), 0)
             } else {
                 (None, 0)
             }
         },
         Pattern::Any(patterns, is_negative) => {
             if *is_negative {
-                match_any_neg(patterns, haystack, max_distance_from_start, match_end)
+                match_none(patterns, haystack, captures, max_distance_from_start, match_end)
             } else {
-                match_any(patterns, haystack, max_distance_from_start, match_end)
+                match_any(patterns, haystack, captures, max_distance_from_start, match_end)
             }
         },
-        Pattern::Wildcard => (Some(1), 1),
+        Pattern::Wildcard => (Some(1), 0),
         Pattern::Choice(pattern_lists) => {
             for patterns in pattern_lists {
-                if let Some(len) = match_patterns(haystack, patterns.to_vec(), max_distance_from_start, match_end) {
-                    return (Some(0), len);
+                if let Some((pos, len)) = match_patterns(haystack, patterns.to_vec(), max_distance_from_start, match_end) {
+                    let capture_str = &haystack[pos..len - 1];
+                    let capture: Vec<Pattern> = capture_str.chars().map(|c| Pattern::SingleCharacter(c)).collect();
+                    captures.push(capture);
+                    return (Some(pos), len);
                 }
             }
             (None, 0)
         },
         Pattern::Optional(pattern) => {
-            if let (Some(index), len) = pattern.matches(haystack, max_distance_from_start, match_end) {
+            if let (Some(index), len) = pattern.matches(haystack, captures, max_distance_from_start, match_end) {
                 (Some(index), len)
             } else {
                 (Some(0), 0)
             }
         },
+        Pattern::BackReference(index) => {
+            if *index >= captures.len() {
+                (None, 0)
+            } else {
+                if let Some((pos, len)) = match_patterns(haystack, captures[*index].clone(), max_distance_from_start, match_end) {
+                    (Some(pos), len)
+                } else {
+                    (None, 0)
+                }
+            }
+        }
     }
 }
 
@@ -224,7 +224,7 @@ fn parse_patterns(pattern: &str, max_len: usize) -> (Vec<Pattern>, usize, bool) 
                 }
             },
             '[' => {
-                if !is_adding_choice && !is_escaping && current_group.is_none() {
+                if !is_escaping && current_group.is_none() {
                     current_group = Some(Pattern::any());
                 } else {
                     let p = Pattern::single_character(char);
@@ -414,6 +414,14 @@ fn parse_patterns(pattern: &str, max_len: usize) -> (Vec<Pattern>, usize, bool) 
                     last_pattern = Some(p.clone());
                 }
             },
+            '1'..='9' => {
+                let p = if !is_escaping { Pattern::single_character(char) } else {
+                    let n: usize = char.to_string().parse().unwrap();
+                    Pattern::backreference(n - 1)
+                };
+                patterns.push(p.clone());
+                last_pattern = Some(p.clone());
+            },
             _ => {
                 let p = Pattern::single_character(char);
                 if let Some(Pattern::Any(group_chars, _)) = &mut current_group {
@@ -435,22 +443,34 @@ fn parse_patterns(pattern: &str, max_len: usize) -> (Vec<Pattern>, usize, bool) 
     (patterns, max_distance_from_start, match_end)
 }
 
-fn match_patterns(input_line: &str, patterns: Vec<Pattern>, mut max_distance_from_start: usize, match_end: bool) -> Option<usize> {
+fn match_patterns(input_line: &str, patterns: Vec<Pattern>, mut max_distance_from_start: usize, match_end: bool) -> Option<(usize, usize)> {
+    let mut first_position = 0;
     let mut position = 0;
+    let mut captures: Vec<Vec<Pattern>> = vec![];
 
     for (index, p) in patterns.iter().enumerate() {
         if let (Some(found_at), len) = p.matches(
             &input_line[position..],
+            &mut captures,
             max_distance_from_start,
             index == patterns.len() - 1 && match_end
         ) {
+            if first_position == 0 {
+                first_position = found_at;
+            }
             max_distance_from_start = len;
             position += found_at;
+            if let Pattern::Choice(_) = p {
+                position += len - 1;
+            }
+            if let Pattern::BackReference(_) = p {
+                position += len - 1;
+            }
         } else {
             return None;
         }
     }
-    Some(position)
+    Some((first_position - 1, position + max_distance_from_start))
 }
 
 pub fn match_pattern(input_line: &str, pattern: &str) -> bool {
