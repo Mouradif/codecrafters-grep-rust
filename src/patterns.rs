@@ -1,9 +1,9 @@
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Pattern {
     SingleCharacter(char),
     Digit,
     WordLike,
-    Group(Vec<Pattern>, bool),
+    Any(Vec<Pattern>, bool),
 }
 
 impl Pattern {
@@ -19,8 +19,8 @@ impl Pattern {
         Pattern::WordLike
     }
 
-    pub fn group(chars: Vec<Pattern>, is_negative: bool) -> Self {
-        Pattern::Group(chars, is_negative)
+    pub fn any() -> Self {
+        Pattern::Any(vec![], false)
     }
 
     pub fn first_match(&self, haystack: &str) -> Option<usize> {
@@ -30,9 +30,25 @@ impl Pattern {
             Pattern::WordLike => haystack
                 .chars()
                 .position(|c| c.is_digit(10) || c.is_alphabetic() || c == '_'),
-            Pattern::Group(patterns, is_negative) => patterns.iter().position(|p| {
+            Pattern::Any(patterns, is_negative) => patterns.iter().position(|p| {
                 p.first_match(haystack).is_none() == *is_negative
             }),
+        }
+    }
+
+    pub fn matches(&self, haystack: &str) -> bool {
+        let first_char = haystack.chars().next();
+        if first_char.is_none() {
+            return false;
+        }
+        let f = first_char.unwrap();
+        match self {
+            Pattern::SingleCharacter(c) => f == *c,
+            Pattern::Digit => f.is_digit(10),
+            Pattern::WordLike => f.is_digit(10) || f.is_alphabetic() || f == '_',
+            Pattern::Any(patterns, is_negative) => patterns.iter().any(|p| {
+                p.matches(haystack) == !*is_negative
+            })
         }
     }
 }
